@@ -24,7 +24,7 @@ class ExecuteSagaStep implements ShouldQueue
     {
         // Assume the step_name is a class that implements Executable
         $stepClass = $this->step->step_name;
-        $instance = app($stepClass);
+        $instance = new $stepClass();
         $instance->execute($this->step->saga->payload);
     }
 }

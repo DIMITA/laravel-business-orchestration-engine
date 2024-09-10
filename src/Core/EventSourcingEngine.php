@@ -18,17 +18,18 @@ class EventSourcingEngine
         ]);
     }
 
-    public function rebuildAggregate(string $aggregateId, $aggregate)
+    public function rebuildAggregate(string $aggregateId, callable $reducer)
     {
         $events = EventStore::where('aggregate_id', $aggregateId)
             ->orderBy('version')
             ->get();
 
+        $state = null;
         foreach ($events as $event) {
-            $aggregate->apply($event);
+            $state = $reducer($state, $event->toArray());
         }
 
-        return $aggregate;
+        return $state;
     }
 
     public function getEvents(string $aggregateId): array

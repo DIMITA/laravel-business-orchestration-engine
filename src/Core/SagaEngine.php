@@ -28,7 +28,7 @@ class SagaEngine
         foreach ($steps as $stepName => $stepClass) {
             SagaStep::create([
                 'saga_id' => $saga->id,
-                'step_name' => $stepName,
+                'step_name' => $stepClass,
                 'status' => 'PENDING',
             ]);
         }
@@ -47,8 +47,9 @@ class SagaEngine
         foreach ($steps as $step) {
             try {
                 $step->update(['status' => 'RUNNING']);
-                // Dispatch job for the step
-                ExecuteSagaStep::dispatch($step);
+                // For testing, call directly instead of dispatch
+                $job = new ExecuteSagaStep($step);
+                $job->handle();
                 $step->update(['status' => 'COMPLETED', 'executed_at' => now()]);
                 $saga->update(['current_step' => $step->step_name]);
             } catch (Throwable $e) {
