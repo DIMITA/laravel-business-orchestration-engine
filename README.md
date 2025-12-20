@@ -15,6 +15,16 @@ php artisan vendor:publish --provider="Dimita\\BusinessOrchestration\\BusinessOr
 php artisan migrate
 ```
 
+## Features
+
+- **Saga Pattern**: Orchestrated transactions with compensation
+- **Workflow Engine**: State machines with guards
+- **Event Sourcing**: Append-only event store
+- **Versioning**: Immutable snapshots
+- **Rule Engine**: AST-based rule evaluation
+- **Sync Engine**: Multi-device synchronization
+- **Dependency Engine**: Business constraint management
+
 ## Usage
 
 ### Saga Pattern
@@ -122,3 +132,8 @@ if (!$dep->checkDeletion('App\\Models\\Product', 456)) {
 The package provides a clean, human-friendly API with persistent state management, crash recovery, and multi-driver support (Database, Redis, Queue).
 
 Each engine is designed for production use with proper error handling and compensation mechanisms.
+
+## Changelog
+
+- v1.0.0: Initial release with all core engines
+- Added Executable contract for saga steps
