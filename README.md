@@ -287,6 +287,69 @@ $builder->apply('resolve');
 $builder->apply('close');
 ```
 
+#### Advanced Features
+
+##### Register Workflow Definition
+
+```php
+// Define a complete workflow with configuration
+$workflow->registerWorkflow('order_approval', [
+    'transitions' => [
+        ['name' => 'submit', 'from' => 'draft', 'to' => 'pending'],
+        ['name' => 'approve', 'from' => 'pending', 'to' => 'approved'],
+        ['name' => 'reject', 'from' => 'pending', 'to' => 'rejected'],
+    ]
+]);
+```
+
+##### Event Hooks
+
+```php
+// Execute custom logic before transitions
+$workflow->beforeTransition('approve', function($instance) {
+    Log::info("Approving workflow for {$instance->model_type}");
+    // Send notification, update related records, etc.
+});
+
+// Execute custom logic after transitions
+$workflow->afterTransition('approve', function($instance) {
+    Mail::to($user)->send(new ApprovalConfirmation());
+});
+```
+
+##### Get Available Transitions
+
+```php
+$builder = $workflow->for($document);
+
+// Get all transitions available from current state
+$availableTransitions = $builder->getEnabledTransitions(['amount' => 500]);
+
+// Returns: ['approve', 'reject', 'request_changes']
+```
+
+##### Check Workflow State
+
+```php
+// Check if model is in specific state
+if ($workflow->isInState($order, 'approved')) {
+    // Process approved order
+}
+
+// Get all possible states in the workflow
+$allStates = $workflow->getAllStates();
+// Returns: ['draft', 'pending', 'approved', 'rejected']
+```
+
+##### Force State Change
+
+```php
+// Override guards and force a state change (use carefully)
+$builder->forceTransition('cancelled', 'Manual cancellation by admin');
+```
+
+> **Note**: The workflow engine is inspired by [Laravel Workflow](https://laravel-workflow.com) and [Symfony Workflow](https://symfony.com/doc/current/workflow.html) patterns, providing state machine functionality with guards, events, and transition history.
+
 ---
 
 ### 3. Event Sourcing
