@@ -779,6 +779,301 @@ src/
 - **Extensible**: Multi-driver support (DB, Redis, Queue)
 - **Testable**: 122 tests, 100% coverage
 
+### Architecture Diagrams
+
+#### 1. Saga Pattern Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SAGA ORCHESTRATION                            │
+└─────────────────────────────────────────────────────────────────┘
+
+Success Flow:
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ PENDING │ -> │ RUNNING │ -> │ RUNNING │ -> │COMPLETED│
+│         │    │ Step 1  │    │ Step 2  │    │         │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘
+
+Failure + Compensation Flow:
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌──────────────┐
+│ PENDING │ -> │ RUNNING │ -> │ FAILED  │ -> │ COMPENSATED  │
+│         │    │ Step 1✓ │    │ Step 2✗ │    │ Rollback 1✓  │
+└─────────┘    └─────────┘    └─────────┘    └──────────────┘
+
+Database Schema:
+sagas                           saga_steps
+├── id                          ├── id
+├── name                        ├── saga_id (FK)
+├── status                      ├── step_name
+├── payload (JSON)              ├── status
+├── current_step                ├── executed_at
+└── timestamps                  ├── compensated_at
+                                ├── error
+                                └── timestamps
+```
+
+#### 2. Workflow State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WORKFLOW ENGINE                               │
+└─────────────────────────────────────────────────────────────────┘
+
+State Transition Graph:
+                    submit
+    ┌─────────┐ ─────────> ┌───────────┐
+    │  draft  │            │ submitted │
+    └─────────┘ <───────── └───────────┘
+                   revise         │
+                                  │ review
+                                  v
+                            ┌───────────┐
+                     reject │ in_review │ approve
+                    ┌───────┴───────────┴────────┐
+                    │                             │
+                    v                             v
+              ┌──────────┐                  ┌──────────┐
+              │ rejected │                  │ approved │
+              └──────────┘                  └──────────┘
+
+Database Schema:
+workflow_instances              workflow_transitions
+├── id                          ├── id
+├── model_type                  ├── instance_id (FK)
+├── model_id                    ├── from_state
+├── state                       ├── to_state
+└── timestamps                  ├── transition_name
+                                ├── context (JSON)
+                                └── timestamps
+```
+
+#### 3. Event Sourcing Stream
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EVENT SOURCING                                │
+└─────────────────────────────────────────────────────────────────┘
+
+Event Stream (Append-Only):
+Time ─────────────────────────────────────────────────────>
+
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│OrderCreated  │─>│PaymentCharged│─>│ItemsShipped  │─>│OrderDelivered│
+│ v1           │  │ v2           │  │ v3           │  │ v4           │
+└──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
+
+Aggregate Rebuild:
+Initial State: {}
+  + OrderCreated     -> {status: 'pending', total: 100}
+  + PaymentCharged   -> {status: 'paid', total: 100, payment_id: 123}
+  + ItemsShipped     -> {status: 'shipped', tracking: 'ABC123'}
+  + OrderDelivered   -> {status: 'delivered', delivered_at: '2024-01-01'}
+
+Database Schema:
+event_store
+├── id
+├── aggregate_id
+├── event_type
+├── event_data (JSON)
+├── version
+├── metadata (JSON)
+└── created_at
+```
+
+#### 4. Version Control System
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VERSIONING ENGINE                             │
+└─────────────────────────────────────────────────────────────────┘
+
+Snapshot Timeline:
+Model State: {name: "Doc1", status: "draft"}
+     │
+     v  snapshot()
+Version 1: {name: "Doc1", status: "draft", hash: "abc123"}
+     │
+     │  model.update({status: "published"})
+     v  snapshot()
+Version 2: {name: "Doc1", status: "published", hash: "def456"}
+     │
+     │  model.update({name: "Doc1-Updated"})
+     v  snapshot()
+Version 3: {name: "Doc1-Updated", status: "published", hash: "ghi789"}
+     │
+     │  restore(version: 1)
+     v
+Restored: {name: "Doc1", status: "draft"}
+
+Database Schema:
+model_versions
+├── id
+├── model_type
+├── model_id
+├── version
+├── snapshot_data (JSON)
+├── hash
+└── created_at
+```
+
+#### 5. Rule Engine AST Evaluation
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    RULE ENGINE                                   │
+└─────────────────────────────────────────────────────────────────┘
+
+Rule Definition (AST):
+Business Rule: "If order total > 100 AND customer_type == 'VIP', apply 20% discount"
+
+AST Structure:
+{
+  type: "logical",
+  operator: "AND",
+  left: {
+    type: "comparison",
+    left: "order_total",
+    op: ">",
+    right: 100
+  },
+  right: {
+    type: "comparison",
+    left: "customer_type",
+    op: "==",
+    right: "VIP"
+  }
+}
+
+Evaluation Flow:
+Context: {order_total: 150, customer_type: "VIP"}
+  ├─> Evaluate left: 150 > 100 = true
+  ├─> Evaluate right: "VIP" == "VIP" = true
+  └─> AND(true, true) = true -> Execute action
+
+Database Schema:
+rules
+├── id
+├── name
+├── condition_ast (JSON)
+├── action (JSON)
+└── timestamps
+```
+
+#### 6. Sync Engine Delta Synchronization
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SYNC ENGINE                                   │
+└─────────────────────────────────────────────────────────────────┘
+
+Multi-Device Sync:
+Server                          Client A                    Client B
+  │                                │                           │
+  │ v1: INSERT {name: "Item1"}     │                           │
+  ├────────────────────────────────>│ Sync from v0             │
+  │                                │ Receives: [v1]            │
+  │                                │                           │
+  │ v2: UPDATE {status: "active"}  │                           │
+  ├────────────────────────────────>│ Sync from v1             │
+  │                                │ Receives: [v2]            │
+  │                                │                           │
+  │                                │                           ├─> Sync from v0
+  │                                │                           │   Receives: [v1, v2]
+  │ v3: UPDATE {price: 99}         │                           │
+  ├────────────────────────────────>│ Sync from v2             │
+  │                                │ Receives: [v3]            │
+  ├───────────────────────────────────────────────────────────>│ Sync from v2
+  │                                │                           │ Receives: [v3]
+
+Database Schema:
+sync_log
+├── id
+├── model_type
+├── model_id
+├── operation (INSERT|UPDATE|DELETE)
+├── version
+├── changed_fields (JSON)
+└── created_at
+```
+
+#### 7. Dependency Graph System
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEPENDENCY ENGINE                             │
+└─────────────────────────────────────────────────────────────────┘
+
+Dependency Graph:
+┌──────────┐
+│  User    │
+└────┬─────┘
+     │ has_many (dependency: prevent_delete)
+     ├────────────┬────────────┬────────────┐
+     v            v            v            v
+┌─────────┐  ┌────────┐  ┌─────────┐  ┌─────────┐
+│ Order   │  │Profile │  │Comments │  │Payments │
+└─────────┘  └────────┘  └─────────┘  └─────────┘
+
+Deletion Check Flow:
+canDelete(User #123)?
+  ├─> Check Orders: 5 orders exist -> BLOCKED
+  ├─> Check Profile: 1 profile exists -> BLOCKED
+  ├─> Check Comments: 12 comments exist -> BLOCKED
+  └─> Check Payments: 3 payments exist -> BLOCKED
+
+Result: Cannot delete User #123 (has dependencies)
+
+Database Schema:
+dependencies
+├── id
+├── source_model
+├── target_model
+├── dependency_type
+├── created_at
+└── updated_at
+```
+
+#### Overall System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Application Layer                            │
+│  (Controllers, Services, Commands)                               │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       v
+┌─────────────────────────────────────────────────────────────────┐
+│              BusinessOrchestration Facade                        │
+│  ->saga() ->workflow() ->eventSourcing() ->version()             │
+│  ->rule() ->sync() ->dependency()                                │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+       ┌───────────────┼───────────────┐
+       v               v               v
+┌────────────┐  ┌────────────┐  ┌────────────┐
+│   Saga     │  │  Workflow  │  │   Event    │
+│  Engine    │  │  Engine    │  │  Sourcing  │
+└─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+      │               │               │
+┌────────────┐  ┌────────────┐  ┌────────────┐
+│  Version   │  │    Rule    │  │    Sync    │
+│  Engine    │  │  Engine    │  │   Engine   │
+└─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+      │               │               │
+      └───────────────┼───────────────┘
+                      v
+┌─────────────────────────────────────────────────────────────────┐
+│                    Driver Layer                                  │
+│  DatabaseDriver │ RedisDriver │ QueueDriver                      │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       v
+┌─────────────────────────────────────────────────────────────────┐
+│                 Persistence Layer                                │
+│  MySQL │ PostgreSQL │ SQLite │ Redis │ RabbitMQ                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Testing
 
 The package includes 122 tests covering all use cases:
