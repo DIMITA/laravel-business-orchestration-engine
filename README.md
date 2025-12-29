@@ -430,6 +430,113 @@ foreach ($events as $event) {
 }
 ```
 
+#### Advanced Features
+
+##### Projectors - Create Read Models
+
+Projectors listen to events and create read models (projections) for querying:
+
+```php
+class OrderTotalProjector
+{
+    // Called when MoneyAdded event is stored
+    public function onMoneyAdded($event)
+    {
+        $account = Account::findOrFail($event->aggregate_id);
+        $account->increment('balance', $event->payload['amount']);
+    }
+
+    // Called when MoneySubtracted event is stored
+    public function onMoneySubtracted($event)
+    {
+        $account = Account::findOrFail($event->aggregate_id);
+        $account->decrement('balance', $event->payload['amount']);
+    }
+}
+
+// Register the projector
+$es->addProjector(OrderTotalProjector::class);
+
+// Now when you store events, projector will automatically update read models
+$es->storeEvent('account-123', 'MoneyAdded', ['amount' => 100]);
+```
+
+##### Reactors - Handle Side Effects
+
+Reactors respond to events with side effects (emails, notifications, etc.):
+
+```php
+class SendEmailReactor
+{
+    public function onOrderPlaced($event)
+    {
+        // Send confirmation email
+        Mail::to($event->payload['email'])->send(new OrderConfirmation($event));
+    }
+}
+
+// Register the reactor
+$es->addReactor(SendEmailReactor::class);
+
+// Reactor will handle side effects asynchronously
+$es->storeEvent('order-456', 'OrderPlaced', ['email' => 'customer@example.com']);
+```
+
+##### Event Replay
+
+Rebuild projections by replaying all events:
+
+```php
+// Replay all events through projectors
+$count = $es->replay();
+echo "Replayed {$count} events";
+
+// Replay only specific aggregate
+$count = $es->replay('account-123');
+
+// Replay through specific projectors only
+$count = $es->replay(null, [OrderTotalProjector::class]);
+```
+
+##### Snapshots for Performance
+
+Create snapshots to avoid replaying thousands of events:
+
+```php
+// Create a snapshot of current state
+$cart = $es->rebuildAggregate('cart-123', $reducer);
+$es->snapshot('cart-123', $cart);
+
+// Retrieve latest snapshot instead of rebuilding from all events
+$cart = $es->getLatestSnapshot('cart-123');
+
+if (!$cart) {
+    // No snapshot exists, rebuild from events
+    $cart = $es->rebuildAggregate('cart-123', $reducer);
+}
+```
+
+##### Metadata and Event Queries
+
+```php
+// Store event with metadata
+$es->storeEvent('order-789', 'OrderShipped',
+    ['tracking_number' => 'ABC123'],
+    ['user_id' => auth()->id(), 'ip_address' => request()->ip()]
+);
+
+// Get events by type
+$shippedOrders = $es->getEventsByType('OrderShipped', 10);
+
+// Get latest version number
+$latestVersion = $es->getLatestVersion('order-789');
+
+// Get events from specific version
+$newEvents = $es->getEvents('order-789', $fromVersion = 5);
+```
+
+> **Note**: The event sourcing engine is inspired by [Spatie Laravel Event Sourcing](https://spatie.be/docs/laravel-event-sourcing), providing projectors, reactors, and aggregate root patterns for building event-sourced applications.
+
 ---
 
 ### 4. Versioning
