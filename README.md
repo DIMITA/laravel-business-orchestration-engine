@@ -1,8 +1,11 @@
 # Laravel Business Orchestration Engine
 
+[![Latest Stable Version](https://poser.pugx.org/dimita/laravel-business-orchestration-engine/v/stable)](https://packagist.org/packages/dimita/laravel-business-orchestration-engine)
+[![Total Downloads](https://poser.pugx.org/dimita/laravel-business-orchestration-engine/downloads)](https://packagist.org/packages/dimita/laravel-business-orchestration-engine)
+[![Monthly Downloads](https://poser.pugx.org/dimita/laravel-business-orchestration-engine/d/monthly)](https://packagist.org/packages/dimita/laravel-business-orchestration-engine)
+
 A comprehensive Laravel package for business orchestration, including Saga Pattern, Workflow Management, Event Sourcing, Versioning, Rule Engine, and Dependency Management.
 
-[![Total Downloads](https://poser.pugx.org/vendor/package/downloads)](https://packagist.org/packages/vendor/package)
 
 > **Note**: This package is based on battle-tested code patterns I've been using in production for years. I've packaged it to make these proven patterns easily reusable across projects.
 
