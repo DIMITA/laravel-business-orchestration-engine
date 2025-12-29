@@ -15,6 +15,7 @@ return new class extends Migration
             $table->unsignedBigInteger('version');
             $table->json('snapshot');
             $table->string('hash');
+            $table->json('metadata')->nullable();
             $table->timestamps();
             $table->unique(['model_type', 'model_id', 'version']);
         });

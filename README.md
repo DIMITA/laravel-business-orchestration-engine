@@ -348,8 +348,6 @@ $allStates = $workflow->getAllStates();
 $builder->forceTransition('cancelled', 'Manual cancellation by admin');
 ```
 
-> **Note**: The workflow engine is inspired by [Laravel Workflow](https://laravel-workflow.com) and [Symfony Workflow](https://symfony.com/doc/current/workflow.html) patterns, providing state machine functionality with guards, events, and transition history.
-
 ---
 
 ### 3. Event Sourcing
@@ -535,8 +533,6 @@ $latestVersion = $es->getLatestVersion('order-789');
 $newEvents = $es->getEvents('order-789', $fromVersion = 5);
 ```
 
-> **Note**: The event sourcing engine is inspired by [Spatie Laravel Event Sourcing](https://spatie.be/docs/laravel-event-sourcing), providing projectors, reactors, and aggregate root patterns for building event-sourced applications.
-
 ---
 
 ### 4. Versioning
@@ -605,6 +601,114 @@ foreach ($versions as $v) {
     echo "Version {$v['version']}: Status = {$v['snapshot']['status']}\n";
 }
 ```
+
+#### Advanced Versioning Features
+
+##### Version Diffing
+
+Compare differences between two versions:
+
+```php
+// Create two versions
+$document->content = 'First version';
+$document->save();
+$version->snapshot($document);
+
+$document->content = 'Second version';
+$document->price = 100;
+$document->save();
+$version->snapshot($document);
+
+// Get differences between versions 1 and 2
+$diff = $version->diff($document, 1, 2);
+
+/*
+Result:
+[
+    'added' => ['price' => 100],
+    'removed' => [],
+    'changed' => [
+        'content' => [
+            'old' => 'First version',
+            'new' => 'Second version'
+        ]
+    ]
+]
+*/
+```
+
+##### Field Exclusion
+
+Exclude sensitive or unnecessary fields from versioning:
+
+```php
+// Exclude timestamps and sensitive data
+$version->excludeFields(['password', 'remember_token', 'last_login_at'])
+    ->snapshot($user);
+
+// Only critical fields are versioned
+```
+
+##### Include Hidden Fields
+
+Include normally hidden fields in version snapshots:
+
+```php
+$user->makeHidden(['password']); // Hidden by default
+
+// Include hidden fields in version
+$version->includeHiddenFields(['password', 'api_token'])
+    ->snapshot($user);
+```
+
+##### Revert to Previous Version
+
+Quick revert to N versions back:
+
+```php
+// Revert 1 version back
+$version->revert($document);
+
+// Revert 3 versions back
+$version->revert($document, 3);
+
+// Latest version is now the restored one
+```
+
+##### Version Metadata
+
+Store contextual information with versions:
+
+```php
+$version->snapshot($document, [
+    'user_id' => auth()->id(),
+    'reason' => 'Legal compliance update',
+    'ip_address' => request()->ip()
+]);
+```
+
+##### Version Utilities
+
+```php
+// Get latest version number
+$latestVersion = $version->getLatestVersion($document); // e.g., 15
+
+// Check if specific version exists
+if ($version->hasVersion($document, 5)) {
+    // Version 5 exists
+}
+
+// Get total version count
+$count = $version->getVersionCount($document); // e.g., 15
+
+// Get version by hash
+$versionModel = $version->getVersionByHash($document, $hash);
+
+// Delete all versions
+$deletedCount = $version->purge($document);
+```
+
+> **Inspired by**: [mpociot/versionable](https://github.com/mpociot/versionable) - Model versioning patterns
 
 ---
 
@@ -686,6 +790,206 @@ $rule2 = $ruleEngine->createRule('StockCheck', [
 ], ['type' => 'reorder']);
 ```
 
+#### Advanced Rule Engine Features
+
+##### Fluent Rule Builder
+
+Create rules using a fluent, readable syntax:
+
+```php
+// Fluent API for rule creation
+$rule = $ruleEngine->rule('HighValueOrder')
+    ->when('total', '>', 1000)
+    ->and('customer_type', '==', 'premium')
+    ->priority(10)
+    ->then(function($context) {
+        // Apply free shipping
+        return ['free_shipping' => true];
+    });
+
+// Rule is automatically saved and can be evaluated
+$context = ['total' => 1500, 'customer_type' => 'premium'];
+$result = $ruleEngine->evaluate($rule, $context); // true
+```
+
+##### Extended Operator Support
+
+```php
+// All supported operators
+'==' '===' '!=' '!==' // Equality
+'>' '>=' '<' '<=' // Comparison
+'in' 'contains' // Array operations
+'starts_with' 'ends_with' // String operations
+
+// Examples
+$rule = $ruleEngine->createRule('EmailCheck', [
+    'type' => 'comparison',
+    'left' => ['type' => 'variable', 'name' => 'email'],
+    'op' => 'ends_with',
+    'right' => ['type' => 'literal', 'value' => '@company.com']
+], ['action' => 'approve']);
+
+$rule = $ruleEngine->createRule('RoleCheck', [
+    'type' => 'comparison',
+    'left' => ['type' => 'variable', 'name' => 'role'],
+    'op' => 'in',
+    'right' => ['type' => 'literal', 'value' => ['admin', 'moderator']]
+], ['action' => 'grant_access']);
+```
+
+##### Logical Operations
+
+Combine multiple conditions with AND/OR/NOT:
+
+```php
+// Complex rule with logical operations
+$rule = $ruleEngine->createRule('ComplexDiscount', [
+    'type' => 'logical',
+    'operator' => 'AND',
+    'left' => [
+        'type' => 'comparison',
+        'left' => ['type' => 'variable', 'name' => 'amount'],
+        'op' => '>',
+        'right' => ['type' => 'literal', 'value' => 500]
+    ],
+    'right' => [
+        'type' => 'logical',
+        'operator' => 'OR',
+        'left' => [
+            'type' => 'comparison',
+            'left' => ['type' => 'variable', 'name' => 'is_member'],
+            'op' => '==',
+            'right' => ['type' => 'literal', 'value' => true]
+        ],
+        'right' => [
+            'type' => 'comparison',
+            'left' => ['type' => 'variable', 'name' => 'coupon_code'],
+            'op' => '!=',
+            'right' => ['type' => 'literal', 'value' => null]
+        ]
+    ]
+], ['discount' => 15], 5);
+```
+
+##### Rule Macros
+
+Define reusable rule patterns:
+
+```php
+// Register a macro for common rule pattern
+$ruleEngine->macro('premium_customer', function($ruleEngine) {
+    return $ruleEngine->rule('PremiumCustomer')
+        ->when('tier', '==', 'premium')
+        ->and('active', '==', true);
+});
+
+// Use the macro
+$premiumRule = $ruleEngine->executeMacro('premium_customer', [$ruleEngine])
+    ->then(function($context) {
+        return ['special_offer' => true];
+    });
+```
+
+##### Custom Operators
+
+Register your own operators:
+
+```php
+// Register custom operator
+$ruleEngine->registerOperator('divisible_by', function($left, $right, $context) {
+    return $left % $right === 0;
+});
+
+// Use custom operator
+$rule = $ruleEngine->createRule('BulkOrder', [
+    'type' => 'comparison',
+    'left' => ['type' => 'variable', 'name' => 'quantity'],
+    'op' => 'divisible_by',
+    'right' => ['type' => 'literal', 'value' => 12]
+], ['bulk_discount' => 10]);
+```
+
+##### Rule Groups
+
+Organize and evaluate rules in groups:
+
+```php
+// Create multiple rules
+$rule1 = $ruleEngine->rule('FreeShipping')
+    ->when('total', '>', 100)
+    ->then(fn($ctx) => ['free_shipping' => true]);
+
+$rule2 = $ruleEngine->rule('TenPercentOff')
+    ->when('total', '>', 500)
+    ->then(fn($ctx) => ['discount' => 10]);
+
+// Add to group
+$ruleEngine->addToGroup('checkout_rules', $rule1->id);
+$ruleEngine->addToGroup('checkout_rules', $rule2->id);
+
+// Evaluate entire group (AND logic)
+$passed = $ruleEngine->evaluateGroup('checkout_rules', $context, 'AND');
+
+// Evaluate with OR logic
+$passed = $ruleEngine->evaluateGroup('checkout_rules', $context, 'OR');
+```
+
+##### Priority-Based Evaluation
+
+Rules with higher priority execute first:
+
+```php
+// Create rules with priorities
+$rule1 = $ruleEngine->rule('CriticalRule')
+    ->when('status', '==', 'urgent')
+    ->priority(100)
+    ->then(fn($ctx) => ['priority' => 'high']);
+
+$rule2 = $ruleEngine->rule('NormalRule')
+    ->when('status', '==', 'normal')
+    ->priority(10)
+    ->then(fn($ctx) => ['priority' => 'normal']);
+
+// Batch evaluate with priority ordering
+$results = $ruleEngine->evaluateBatch([1, 2, 3], $context);
+// Returns results sorted by priority descending
+```
+
+##### Built-in Functions
+
+Use built-in functions in rule conditions:
+
+```php
+// Function-based rules
+$rule = $ruleEngine->createRule('EmptyCartCheck', [
+    'type' => 'function',
+    'name' => 'empty',
+    'args' => [['type' => 'variable', 'name' => 'cart_items']]
+], ['action' => 'show_empty_message']);
+
+// Other built-in functions:
+// - empty, isset, is_null
+// - count (with comparison)
+```
+
+##### Get Matching Rules
+
+Find all rules that pass for a context:
+
+```php
+$context = ['amount' => 750, 'customer_type' => 'premium'];
+
+// Get all matching rules
+$matchingRules = $ruleEngine->getMatchingRules($context);
+
+foreach ($matchingRules as $rule) {
+    echo "Matched rule: {$rule->name}\n";
+    $ruleEngine->executeAction($rule, $context);
+}
+```
+
+> **Inspired by**: [bradietilley/laravel-rules](https://github.com/bradietilley/laravel-rules) - Object-oriented rule patterns
+
 ---
 
 ### 6. Sync Engine
@@ -765,6 +1069,226 @@ foreach ($localChanges as $change) {
 $newClientVersion = 15; // Version after upload
 $newDeltas = $sync->getDeltas('App\\Models\\Task', 1, $newClientVersion);
 ```
+
+#### Advanced Sync Engine Features
+
+##### Conflict Resolution
+
+Handle conflicts when data changes on both client and server:
+
+```php
+// Synchronize with conflict detection
+$sourceModel = Task::find(1);
+$targetModel = Task::find(1); // Simulating different state
+
+$result = $sync->sync($sourceModel, $targetModel);
+
+/*
+Result:
+[
+    'conflicts' => [
+        'status' => [
+            'source' => 'completed',
+            'target' => 'in_progress'
+        ]
+    ],
+    'synced_fields' => ['title', 'status', 'description']
+]
+*/
+```
+
+##### Conflict Strategies
+
+Choose how conflicts are resolved:
+
+```php
+// Latest wins (default)
+$sync->setConflictStrategy('latest_wins')
+    ->sync($source, $target);
+
+// Source always wins
+$sync->setConflictStrategy('source_wins')
+    ->sync($source, $target);
+
+// Target always wins
+$sync->setConflictStrategy('target_wins')
+    ->sync($source, $target);
+
+// Merge values (for arrays and strings)
+$sync->setConflictStrategy('merge')
+    ->sync($source, $target);
+```
+
+##### Custom Conflict Handlers
+
+Register custom handlers for specific fields:
+
+```php
+// Register custom handler for 'tags' field
+$sync->registerConflictHandler('tags', function($values, $source, $target) {
+    // Merge tags from both sources uniquely
+    $sourceTags = $values['source'];
+    $targetTags = $values['target'];
+
+    return array_unique(array_merge($targetTags, $sourceTags));
+});
+
+// Now when syncing, 'tags' conflicts use custom handler
+$sync->sync($source, $target);
+```
+
+##### Selective Field Sync
+
+Sync only specific fields:
+
+```php
+// Sync only title and description
+$result = $sync->sync($source, $target, ['title', 'description']);
+
+// Other fields are ignored
+```
+
+##### Batch Synchronization
+
+Sync multiple model pairs at once:
+
+```php
+$pairs = [
+    ['source' => $task1, 'target' => $task1Remote],
+    ['source' => $task2, 'target' => $task2Remote],
+    ['source' => $task3, 'target' => $task3Remote],
+];
+
+$results = $sync->batchSync($pairs, ['title', 'status']);
+
+foreach ($results as $index => $result) {
+    if (isset($result['error'])) {
+        echo "Pair {$index} failed: {$result['error']}\n";
+    } else {
+        echo "Pair {$index} synced: {$result['synced_fields']}\n";
+    }
+}
+```
+
+##### Sync Checkpoints
+
+Create named checkpoints for restore points:
+
+```php
+// Create checkpoint before major changes
+$sync->checkpoint($task, 'before_bulk_update');
+
+// Make changes
+$task->status = 'archived';
+$task->save();
+
+// Restore from checkpoint if needed
+$sync->restoreCheckpoint($task, 'before_bulk_update');
+
+// List all checkpoints
+$checkpoints = $sync->getCheckpoints($task);
+/*
+[
+    [
+        'version' => 15,
+        'name' => 'before_bulk_update',
+        'created_at' => '2025-01-15 10:30:00'
+    ],
+    ...
+]
+*/
+```
+
+##### Sync Status Monitoring
+
+Track synchronization activity:
+
+```php
+$status = $sync->getSyncStatus($task);
+
+/*
+Result:
+[
+    'total_syncs' => 42,
+    'last_sync' => '2025-01-15 14:30:00',
+    'current_version' => 42,
+    'operations' => [
+        'synced' => 35,
+        'checkpoint' => 7
+    ]
+]
+*/
+```
+
+##### Model Comparison
+
+Compare two models without syncing:
+
+```php
+// Detect differences
+$differences = $sync->compare($modelA, $modelB);
+
+/*
+Result:
+[
+    'title' => [
+        'source' => 'Task A',
+        'target' => 'Task B'
+    ],
+    'status' => [
+        'source' => 'completed',
+        'target' => 'pending'
+    ]
+]
+*/
+
+// Compare specific fields only
+$differences = $sync->compare($modelA, $modelB, ['title', 'status']);
+```
+
+##### Apply Deltas
+
+Apply a set of changes to a model:
+
+```php
+$deltas = [
+    [
+        'operation' => 'update',
+        'changed_fields' => ['status' => 'completed', 'completed_at' => now()]
+    ],
+    [
+        'operation' => 'update',
+        'changed_fields' => ['priority' => 'high']
+    ]
+];
+
+$updatedModel = $sync->applyDeltas($task, $deltas);
+```
+
+##### Metadata Tracking
+
+Track sync context and metadata:
+
+```php
+$sync->logChange($task, 'synced', ['status'], [
+    'device_id' => 'mobile-123',
+    'user_id' => auth()->id(),
+    'app_version' => '2.1.0'
+]);
+```
+
+##### Cleanup Old Logs
+
+Purge old synchronization logs to save space:
+
+```php
+// Keep only last 100 logs per model type
+$deletedCount = $sync->purgeOldLogs('App\\Models\\Task', 100);
+
+echo "Deleted {$deletedCount} old sync logs";
+```
+
+> **Inspired by**: [aerni/laravel-sync](https://github.com/aerni/laravel-sync) - Git-like sync patterns
 
 ---
 

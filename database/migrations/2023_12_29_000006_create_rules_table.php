@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('name');
             $table->json('condition_ast');
             $table->json('action');
+            $table->integer('priority')->default(0);
             $table->timestamps();
         });
     }

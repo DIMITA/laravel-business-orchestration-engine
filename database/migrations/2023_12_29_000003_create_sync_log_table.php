@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('operation'); // INSERT, UPDATE, DELETE
             $table->json('changed_fields')->nullable();
             $table->unsignedBigInteger('version');
+            $table->json('metadata')->nullable();
             $table->timestamps();
             $table->index(['model_type', 'model_id', 'version']);
         });
