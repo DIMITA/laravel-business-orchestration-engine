@@ -55,7 +55,6 @@ class SagaEngine
             } catch (Throwable $e) {
                 $step->update(['status' => 'FAILED', 'error' => $e->getMessage()]);
                 $this->compensateSaga($saga);
-                $saga->update(['status' => 'FAILED']);
                 throw $e;
             }
         }
