@@ -17,6 +17,45 @@ class BusinessOrchestrationServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/business-orchestration.php', 'business-orchestration');
 
+        // Register each engine as independent singleton
+        $this->app->singleton(SagaEngine::class, function ($app) {
+            return new SagaEngine();
+        });
+
+        $this->app->singleton(WorkflowEngine::class, function ($app) {
+            return new WorkflowEngine();
+        });
+
+        $this->app->singleton(SyncEngine::class, function ($app) {
+            return new SyncEngine();
+        });
+
+        $this->app->singleton(VersionEngine::class, function ($app) {
+            return new VersionEngine();
+        });
+
+        $this->app->singleton(EventSourcingEngine::class, function ($app) {
+            return new EventSourcingEngine();
+        });
+
+        $this->app->singleton(RuleEngine::class, function ($app) {
+            return new RuleEngine();
+        });
+
+        $this->app->singleton(DependencyEngine::class, function ($app) {
+            return new DependencyEngine();
+        });
+
+        // Register aliases for convenience
+        $this->app->alias(SagaEngine::class, 'saga-engine');
+        $this->app->alias(WorkflowEngine::class, 'workflow-engine');
+        $this->app->alias(SyncEngine::class, 'sync-engine');
+        $this->app->alias(VersionEngine::class, 'version-engine');
+        $this->app->alias(EventSourcingEngine::class, 'event-sourcing-engine');
+        $this->app->alias(RuleEngine::class, 'rule-engine');
+        $this->app->alias(DependencyEngine::class, 'dependency-engine');
+
+        // Register the main facade-style accessor
         $this->app->singleton('business-orchestration', function ($app) {
             return new class {
                 public function saga(): SagaEngine

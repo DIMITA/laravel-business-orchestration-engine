@@ -373,4 +373,264 @@ class VersionTest extends TestCase
         $this->assertNotNull($versions[1]->created_at);
         $this->assertNotNull($versions[2]->created_at);
     }
+
+    /** @test */
+    public function it_can_diff_two_versions()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Version1', 'status' => 'PENDING', 'payload' => ['amount' => 100]]);
+        $version->snapshot($model);
+
+        $model->name = 'Version2';
+        $model->status = 'RUNNING';
+        $model->payload = ['amount' => 200, 'new_field' => 'value'];
+        $version->snapshot($model);
+
+        $diff = $version->diff($model, 1, 2);
+
+        $this->assertArrayHasKey('changed', $diff);
+        $this->assertArrayHasKey('added', $diff);
+        $this->assertEquals('Version1', $diff['changed']['name']['old']);
+        $this->assertEquals('Version2', $diff['changed']['name']['new']);
+        $this->assertEquals('PENDING', $diff['changed']['status']['old']);
+        $this->assertEquals('RUNNING', $diff['changed']['status']['new']);
+    }
+
+    /** @test */
+    public function diff_detects_added_fields()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+        $version->snapshot($model);
+
+        $model->current_step = 5;
+        $version->snapshot($model);
+
+        $diff = $version->diff($model, 1, 2);
+
+        $this->assertArrayHasKey('added', $diff);
+        $this->assertEquals(5, $diff['added']['current_step']);
+    }
+
+    /** @test */
+    public function diff_detects_removed_fields()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => [], 'current_step' => 5]);
+        $version->snapshot($model);
+
+        $model->current_step = null;
+        $version->snapshot($model);
+
+        $diff = $version->diff($model, 1, 2);
+
+        $this->assertArrayHasKey('removed', $diff);
+    }
+
+    /** @test */
+    public function it_can_exclude_fields_from_snapshot()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $version->excludeFields(['status'])->snapshot($model);
+
+        $snapshot = ModelVersion::where('model_id', $model->id)->first();
+
+        $this->assertArrayHasKey('name', $snapshot->snapshot);
+        $this->assertArrayNotHasKey('status', $snapshot->snapshot);
+    }
+
+    /** @test */
+    public function it_can_revert_to_previous_version()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Version1', 'status' => 'PENDING', 'payload' => []]);
+        $version->snapshot($model);
+
+        $model->name = 'Version2';
+        $version->snapshot($model);
+
+        $model->name = 'Version3';
+        $version->snapshot($model);
+
+        $version->revert($model, 1);
+
+        $this->assertEquals('Version2', $model->name);
+    }
+
+    /** @test */
+    public function it_can_revert_multiple_steps()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'V1', 'status' => 'PENDING', 'payload' => []]);
+        $version->snapshot($model);
+
+        $model->name = 'V2';
+        $version->snapshot($model);
+
+        $model->name = 'V3';
+        $version->snapshot($model);
+
+        $model->name = 'V4';
+        $version->snapshot($model);
+
+        $version->revert($model, 3);
+
+        $this->assertEquals('V1', $model->name);
+    }
+
+    /** @test */
+    public function it_can_get_latest_version_number()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $this->assertEquals(0, $version->getLatestVersion($model));
+
+        $version->snapshot($model);
+        $this->assertEquals(1, $version->getLatestVersion($model));
+
+        $version->snapshot($model);
+        $this->assertEquals(2, $version->getLatestVersion($model));
+
+        $version->snapshot($model);
+        $this->assertEquals(3, $version->getLatestVersion($model));
+    }
+
+    /** @test */
+    public function it_can_check_if_version_exists()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+        $version->snapshot($model);
+        $version->snapshot($model);
+
+        $this->assertTrue($version->hasVersion($model, 1));
+        $this->assertTrue($version->hasVersion($model, 2));
+        $this->assertFalse($version->hasVersion($model, 3));
+        $this->assertFalse($version->hasVersion($model, 99));
+    }
+
+    /** @test */
+    public function it_can_get_version_count()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $this->assertEquals(0, $version->getVersionCount($model));
+
+        $version->snapshot($model);
+        $this->assertEquals(1, $version->getVersionCount($model));
+
+        $version->snapshot($model);
+        $version->snapshot($model);
+        $this->assertEquals(3, $version->getVersionCount($model));
+    }
+
+    /** @test */
+    public function it_can_purge_all_versions()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+        $version->snapshot($model);
+        $version->snapshot($model);
+        $version->snapshot($model);
+
+        $this->assertEquals(3, $version->getVersionCount($model));
+
+        $deleted = $version->purge($model);
+
+        $this->assertEquals(3, $deleted);
+        $this->assertEquals(0, $version->getVersionCount($model));
+    }
+
+    /** @test */
+    public function it_can_get_version_by_hash()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+        $snapshot = $version->snapshot($model);
+
+        $found = $version->getVersionByHash($model, $snapshot->hash);
+
+        $this->assertNotNull($found);
+        $this->assertEquals($snapshot->id, $found->id);
+        $this->assertEquals($snapshot->hash, $found->hash);
+    }
+
+    /** @test */
+    public function version_by_hash_returns_null_when_not_found()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $found = $version->getVersionByHash($model, 'nonexistent-hash');
+
+        $this->assertNull($found);
+    }
+
+    /** @test */
+    public function it_can_store_metadata_with_snapshot()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $metadata = [
+            'user_id' => 123,
+            'reason' => 'Legal compliance',
+            'ip_address' => '192.168.1.1'
+        ];
+
+        $snapshot = $version->snapshot($model, $metadata);
+
+        $this->assertEquals($metadata, $snapshot->metadata);
+
+        $retrieved = ModelVersion::find($snapshot->id);
+        $this->assertEquals(123, $retrieved->metadata['user_id']);
+        $this->assertEquals('Legal compliance', $retrieved->metadata['reason']);
+    }
+
+    /** @test */
+    public function metadata_defaults_to_empty_array_when_not_provided()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+        $snapshot = $version->snapshot($model);
+
+        $this->assertEquals([], $snapshot->metadata);
+    }
+
+    /** @test */
+    public function excluded_fields_persist_across_snapshots()
+    {
+        $version = app('business-orchestration')->version();
+
+        $model = Saga::create(['name' => 'Test', 'status' => 'PENDING', 'payload' => []]);
+
+        $version->excludeFields(['status']);
+
+        $version->snapshot($model);
+        $model->name = 'Changed';
+        $version->snapshot($model);
+
+        $snapshots = ModelVersion::where('model_id', $model->id)->get();
+
+        $this->assertArrayNotHasKey('status', $snapshots[0]->snapshot);
+        $this->assertArrayNotHasKey('status', $snapshots[1]->snapshot);
+    }
 }

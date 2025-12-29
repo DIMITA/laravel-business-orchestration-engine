@@ -290,11 +290,19 @@ class SyncEngine
      */
     public function purgeOldLogs(string $modelType, int $keepLastN = 100): int
     {
-        $logs = SyncLog::where('model_type', $modelType)
+        // Get all logs for this model type
+        $allLogs = SyncLog::where('model_type', $modelType)
             ->orderBy('version', 'desc')
-            ->skip($keepLastN)
-            ->pluck('id');
+            ->pluck('id')
+            ->toArray();
 
-        return SyncLog::whereIn('id', $logs)->delete();
+        // Get IDs to delete (skip the first N)
+        $logsToDelete = array_slice($allLogs, $keepLastN);
+
+        if (empty($logsToDelete)) {
+            return 0;
+        }
+
+        return SyncLog::whereIn('id', $logsToDelete)->delete();
     }
 }
