@@ -33,13 +33,13 @@ class RuleEngine
         return false;
     }
 
-    public function executeAction(Rule $rule, array $context)
+    public function executeAction($rule, array $context)
     {
         // Execute action - assume it's a callable or class
         $action = $rule->action;
 
-        if (is_callable($action)) {
-            $action($context);
+        if ($action instanceof \Closure || is_callable($action)) {
+            return $action($context);
         }
     }
 
