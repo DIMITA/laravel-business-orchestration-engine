@@ -2,6 +2,8 @@
 
 A comprehensive Laravel package for business orchestration, including Saga Pattern, Workflow Management, Event Sourcing, Versioning, Rule Engine, and Dependency Management.
 
+[![Total Downloads](https://poser.pugx.org/vendor/package/downloads)](https://packagist.org/packages/vendor/package)
+
 > **Note**: This package is based on battle-tested code patterns I've been using in production for years. I've packaged it to make these proven patterns easily reusable across projects.
 
 [![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen)]()
