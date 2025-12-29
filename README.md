@@ -23,7 +23,7 @@ A comprehensive Laravel package for business orchestration, including Saga Patte
 For enhanced saga orchestration capabilities:
 - **Queue Driver**: Redis, Database, or SQS for asynchronous step execution
 - **Cache Driver**: Redis or Memcached for performance optimization
-- **Message Queue** (optional): RabbitMQ for distributed saga coordination (see [vandarpay/orchestration-saga](https://github.com/vandarpay/orchestration-saga) for microservice orchestration)
+- **Message Queue** (optional): RabbitMQ for distributed saga coordination
 
 ## Table of Contents
 
@@ -148,6 +148,46 @@ app('dependency-engine')     // DependencyEngine
 | **Independent (Alias)** | Quick prototyping, flexibility, simpler syntax |
 | **Dependency Injection** | Production code, testability, SOLID principles |
 | **Combined Facade** | Complex workflows using multiple engines |
+
+### Configuration for Selective Loading
+
+Improve performance by loading only the engines you need. Edit `config/business-orchestration.php`:
+
+```php
+'engines' => [
+    'saga' => true,              // Enable Saga Pattern
+    'workflow' => true,          // Enable Workflow Engine
+    'sync' => false,             // Disable Sync Engine (not needed)
+    'version' => true,           // Enable Versioning
+    'event_sourcing' => false,   // Disable Event Sourcing (not needed)
+    'rule' => true,              // Enable Rule Engine
+    'dependency' => false,       // Disable Dependency Engine (not needed)
+],
+```
+
+Or use environment variables in your `.env`:
+
+```env
+# Enable only the engines you need
+ORCHESTRATION_SAGA_ENABLED=true
+ORCHESTRATION_WORKFLOW_ENABLED=true
+ORCHESTRATION_SYNC_ENABLED=false
+ORCHESTRATION_VERSION_ENABLED=true
+ORCHESTRATION_EVENT_SOURCING_ENABLED=false
+ORCHESTRATION_RULE_ENABLED=true
+ORCHESTRATION_DEPENDENCY_ENABLED=false
+```
+
+**Benefits of selective loading:**
+- Reduced memory footprint
+- Faster application bootstrap
+- Cleaner service container
+- Only load what you actually use
+
+**Note:** If you try to use a disabled engine, you'll get a clear error message:
+```
+RuntimeException: SyncEngine is not enabled. Enable it in config/business-orchestration.php
+```
 
 ## Usage Guide
 
@@ -787,8 +827,6 @@ $versionModel = $version->getVersionByHash($document, $hash);
 $deletedCount = $version->purge($document);
 ```
 
-> **Inspired by**: [mpociot/versionable](https://github.com/mpociot/versionable) - Model versioning patterns
-
 ---
 
 ### 5. Rule Engine
@@ -1066,8 +1104,6 @@ foreach ($matchingRules as $rule) {
     $ruleEngine->executeAction($rule, $context);
 }
 ```
-
-> **Inspired by**: [bradietilley/laravel-rules](https://github.com/bradietilley/laravel-rules) - Object-oriented rule patterns
 
 ---
 
@@ -1366,10 +1402,6 @@ $deletedCount = $sync->purgeOldLogs('App\\Models\\Task', 100);
 
 echo "Deleted {$deletedCount} old sync logs";
 ```
-
-> **Inspired by**: [aerni/laravel-sync](https://github.com/aerni/laravel-sync) - Git-like sync patterns
-
----
 
 ### 7. Dependency Engine
 
@@ -1884,22 +1916,92 @@ Available in `config/business-orchestration.php`:
 
 ```php
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Enabled Engines
+    |--------------------------------------------------------------------------
+    |
+    | Configure which engines should be loaded and available in your application.
+    | Set to false to disable an engine completely and improve performance.
+    | By default, all engines are enabled.
+    |
+    */
+    'engines' => [
+        'saga' => env('ORCHESTRATION_SAGA_ENABLED', true),
+        'workflow' => env('ORCHESTRATION_WORKFLOW_ENABLED', true),
+        'sync' => env('ORCHESTRATION_SYNC_ENABLED', true),
+        'version' => env('ORCHESTRATION_VERSION_ENABLED', true),
+        'event_sourcing' => env('ORCHESTRATION_EVENT_SOURCING_ENABLED', true),
+        'rule' => env('ORCHESTRATION_RULE_ENABLED', true),
+        'dependency' => env('ORCHESTRATION_DEPENDENCY_ENABLED', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Storage Drivers
+    |--------------------------------------------------------------------------
+    |
+    | Configure how orchestration data is stored and retrieved.
+    | Supports: database, redis, queue
+    |
+    */
     'drivers' => [
-        'default' => 'database',
+        'default' => env('BUSINESS_ORCHESTRATION_DRIVER', 'database'),
 
         'database' => [
-            'connection' => null, // null = default connection
+            'connection' => env('DB_CONNECTION', 'mysql'),
         ],
 
         'redis' => [
-            'connection' => 'default',
+            'connection' => env('REDIS_CONNECTION', 'default'),
         ],
 
         'queue' => [
-            'connection' => 'default',
+            'connection' => env('QUEUE_CONNECTION', 'sync'),
         ],
     ],
 ];
+```
+
+### Configuration Examples
+
+**Scenario 1: E-commerce application (needs Saga, Workflow, Versioning)**
+```php
+'engines' => [
+    'saga' => true,              // For order processing
+    'workflow' => true,          // For order status transitions
+    'sync' => false,             // No mobile sync needed
+    'version' => true,           // For order audit trail
+    'event_sourcing' => false,   // Not needed
+    'rule' => true,              // For discount rules
+    'dependency' => false,       // Not needed
+],
+```
+
+**Scenario 2: Mobile-first app with offline support**
+```php
+'engines' => [
+    'saga' => false,
+    'workflow' => false,
+    'sync' => true,              // Critical for mobile sync
+    'version' => true,           // Version tracking
+    'event_sourcing' => true,    // Event history
+    'rule' => false,
+    'dependency' => false,
+],
+```
+
+**Scenario 3: Enterprise workflow system**
+```php
+'engines' => [
+    'saga' => true,              // Multi-step processes
+    'workflow' => true,          // State machines
+    'sync' => false,
+    'version' => true,           // Document versioning
+    'event_sourcing' => true,    // Complete audit trail
+    'rule' => true,              // Business rules
+    'dependency' => true,        // Constraint management
+],
 ```
 
 ## Support
