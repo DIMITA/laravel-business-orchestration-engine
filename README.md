@@ -9,6 +9,22 @@ A comprehensive Laravel package for business orchestration, including Saga Patte
 [![PHP](https://img.shields.io/badge/php-%5E8.1-blue)]()
 [![Laravel](https://img.shields.io/badge/laravel-%5E10.0%20%7C%20%5E11.0-red)]()
 
+## Requirements
+
+- **PHP**: ^8.1 or higher
+- **Laravel**: ^10.0 or ^11.0
+- **Database**: MySQL 5.7+, PostgreSQL 10+, or SQLite 3.8+
+- **Extensions**:
+  - `ext-json` - JSON support for payload serialization
+  - `ext-pdo` - Database connectivity
+
+### Optional Requirements
+
+For enhanced saga orchestration capabilities:
+- **Queue Driver**: Redis, Database, or SQS for asynchronous step execution
+- **Cache Driver**: Redis or Memcached for performance optimization
+- **Message Queue** (optional): RabbitMQ for distributed saga coordination (see [vandarpay/orchestration-saga](https://github.com/vandarpay/orchestration-saga) for microservice orchestration)
+
 ## Table of Contents
 
 - [Installation](#installation)
@@ -110,7 +126,7 @@ class ShipOrderStep
     }
 }
 
-// Start the saga
+// Start the saga synchronously
 $saga = BusinessOrchestration::saga()->startSaga('OrderProcessing', [
     'validate' => ValidateOrderStep::class,
     'charge' => ChargePaymentStep::class,
@@ -118,19 +134,74 @@ $saga = BusinessOrchestration::saga()->startSaga('OrderProcessing', [
 ], ['order_id' => 123]);
 
 // If a step fails, completed steps will be automatically compensated
-// The saga will have status 'COMPENSATED'
+```
+
+#### Advanced Compensation
+
+Define compensation logic for each step to properly rollback changes:
+
+```php
+class ChargePaymentStep
+{
+    public function execute($payload)
+    {
+        $order = Order::find($payload['order_id']);
+        $payment = PaymentGateway::charge($order->total);
+
+        if (!$payment->success) {
+            throw new \Exception('Payment failed');
+        }
+
+        return true;
+    }
+
+    // Define compensation logic
+    public function compensate($payload)
+    {
+        $order = Order::find($payload['order_id']);
+
+        // Refund the payment
+        PaymentGateway::refund($order->total);
+
+        // Update order status
+        $order->update(['status' => 'payment_refunded']);
+    }
+}
+```
+
+#### Asynchronous Execution
+
+Execute sagas asynchronously using Laravel queues:
+
+```php
+// Start saga asynchronously (returns immediately)
+$saga = BusinessOrchestration::saga()->startSagaAsync('OrderProcessing', [
+    'validate' => ValidateOrderStep::class,
+    'charge' => ChargePaymentStep::class,
+    'ship' => ShipOrderStep::class,
+], ['order_id' => 123]);
+
+// Check saga status later
+$status = BusinessOrchestration::saga()->getSagaStatus($saga->id);
+
+echo $status['status']; // PENDING, RUNNING, COMPLETED, COMPENSATED
+echo $status['completed_steps'] . '/' . $status['total_steps'];
 ```
 
 #### Resume After Crash
 
 ```php
-// If your server crashes during execution
-// You can resume the saga from its last state
-
+// If your server crashes during execution, resume the saga
 $sagaEngine = BusinessOrchestration::saga();
-
-// Resume saga by ID
 $sagaEngine->resumeSaga($sagaId);
+```
+
+#### Cancel Running Saga
+
+```php
+// Cancel a saga that's pending or running
+$sagaEngine = BusinessOrchestration::saga();
+$sagaEngine->cancelSaga($sagaId);
 ```
 
 #### Saga Status Flow
@@ -140,6 +211,8 @@ $sagaEngine->resumeSaga($sagaId);
 - `COMPLETED` - All steps completed successfully
 - `FAILED` - A step failed (before compensation)
 - `COMPENSATED` - Completed steps have been rolled back after failure
+- `CANCELLED` - Saga was manually cancelled
+- `COMPENSATION_FAILED` - Compensation encountered an error (step-level)
 
 ---
 
