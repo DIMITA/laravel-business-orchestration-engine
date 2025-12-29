@@ -1,5 +1,6 @@
 {
     "name": "dimita/laravel-business-orchestration-engine",
+    "version": "1.0.0",
     "description": "A Laravel library for business orchestration including Saga Pattern, Workflow, Event Sourcing, Versioning, Rule Engine, and more.",
     "type": "library",
     "license": "MIT",
