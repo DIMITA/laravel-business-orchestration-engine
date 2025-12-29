@@ -4,7 +4,7 @@ A comprehensive Laravel package for business orchestration, including Saga Patte
 
 > **Note**: This package is based on battle-tested code patterns I've been using in production for years. I've packaged it to make these proven patterns easily reusable across projects.
 
-[![Tests](https://img.shields.io/badge/tests-122%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)]()
 [![PHP](https://img.shields.io/badge/php-%5E8.1-blue)]()
 [![Laravel](https://img.shields.io/badge/laravel-%5E10.0%20%7C%20%5E11.0-red)]()
@@ -29,6 +29,7 @@ For enhanced saga orchestration capabilities:
 
 - [Installation](#installation)
 - [Features](#features)
+- [Independent vs Combined Usage](#independent-vs-combined-usage)
 - [Usage Guide](#usage-guide)
   - [1. Saga Pattern](#1-saga-pattern)
   - [2. Workflow Engine](#2-workflow-engine)
@@ -69,6 +70,84 @@ php artisan migrate
 | **Rule Engine** | Business rule evaluation via AST | Dynamic discounts, business validation |
 | **Sync Engine** | Multi-device synchronization | Offline-first apps, mobile sync |
 | **Dependency Engine** | Business constraint management | Pre-delete validation, dependency graphs |
+
+## Independent vs Combined Usage
+
+This package offers **maximum flexibility** - use engines independently or together based on your needs.
+
+### Independent Usage
+
+Perfect when you only need specific functionality:
+
+```php
+use Dimita\BusinessOrchestration\Core\VersionEngine;
+use Dimita\BusinessOrchestration\Core\RuleEngine;
+use Dimita\BusinessOrchestration\Core\SyncEngine;
+
+// Method 1: Direct class resolution
+$versionEngine = app(VersionEngine::class);
+$versionEngine->snapshot($model);
+
+// Method 2: Using aliases
+$ruleEngine = app('rule-engine');
+$rule = $ruleEngine->rule('MyRule')
+    ->when('amount', '>', 1000)
+    ->then(fn($ctx) => ['discount' => 10]);
+
+// Method 3: Dependency injection (recommended)
+class OrderController
+{
+    public function __construct(
+        private VersionEngine $version,
+        private RuleEngine $rules
+    ) {}
+
+    public function process(Order $order)
+    {
+        $this->version->snapshot($order);
+        $discountRule = $this->rules->getMatchingRules(['amount' => $order->total]);
+    }
+}
+```
+
+### Combined Usage
+
+Use the main facade when working with multiple engines:
+
+```php
+$orchestration = app('business-orchestration');
+
+// Access any engine
+$saga = $orchestration->saga();
+$workflow = $orchestration->workflow();
+$version = $orchestration->version();
+$rules = $orchestration->rule();
+$sync = $orchestration->sync();
+$eventSourcing = $orchestration->eventSourcing();
+$dependency = $orchestration->dependency();
+```
+
+### Available Aliases
+
+```php
+// All engines are available via these aliases:
+app('saga-engine')           // SagaEngine
+app('workflow-engine')       // WorkflowEngine
+app('sync-engine')           // SyncEngine
+app('version-engine')        // VersionEngine
+app('event-sourcing-engine') // EventSourcingEngine
+app('rule-engine')           // RuleEngine
+app('dependency-engine')     // DependencyEngine
+```
+
+### When to Use Each Approach
+
+| Approach | Best For |
+|----------|----------|
+| **Independent (Class)** | Type safety, IDE autocompletion, single-engine projects |
+| **Independent (Alias)** | Quick prototyping, flexibility, simpler syntax |
+| **Dependency Injection** | Production code, testability, SOLID principles |
+| **Combined Facade** | Complex workflows using multiple engines |
 
 ## Usage Guide
 
